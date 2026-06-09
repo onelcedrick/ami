@@ -1,55 +1,13 @@
-# Dependencies
 node_modules/
-.pnp
-.pnp.js
-
-# Next.js
 .next/
-out/
-build
-dist
-
-# Go
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-services/*/bin/
+bin/
 vendor/
-
-# Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-*.egg-info/
-
-# Environment
+*.pyc
 .env
-.env.local
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
+*.log
 .DS_Store
-Thumbs.db
-
-# Keys
-keys/*.pem
-!keys/.gitkeep
-
-# Uploads
 uploads/*
 !uploads/.gitkeep
-
-# Docker
-docker-compose.override.yml
-*.log
+keys/*.pem
+!keys/.gitkeep
