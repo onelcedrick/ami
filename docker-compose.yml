@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # INFRASTRUCTURE
+  # ==========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: aminfo-postgres
+    environment:
+      POSTGRES_USER: aminfo
+      POSTGRES_PASSWORD: aminfo123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aminfo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aminfo-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: aminfo-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aminfo-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: aminfo-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: aminfo
+      RABBITMQ_DEFAULT_PASS: aminfo123
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - aminfo-network
+
+  # MailHog pour tester les emails
+  mailhog:
+    image: mailhog/mailhog
+    container_name: aminfo-mailhog
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Interface web
+    networks:
+      - aminfo-network
+
+networks:
+  aminfo-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
