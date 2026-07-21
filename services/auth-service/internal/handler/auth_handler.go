@@ -3,6 +3,8 @@ package handler
 import (
 	"github.com/am-info/auth-service/internal/model"
 	"github.com/am-info/auth-service/internal/service"
+	"fmt"
+	"os"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -77,6 +79,11 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		})
 	}
 
+    // Loguer la connexion
+    go logLogin(user.Email, user.ID)
+    // Émettre événement login (Observer Pattern)
+    // Logger la connexion directement
+    go logLogin(user.Email, user.ID)
 	return c.JSON(response)
 }
 
@@ -100,4 +107,73 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"message": "Refresh token endpoint",
 	})
+}
+
+// POST /api/v1/auth/avatar
+func (h *AuthHandler) UploadAvatar(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(string)
+	
+	file, err := c.FormFile("file")
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Fichier requis"})
+	}
+	
+	// Créer le dossier uploads s'il n'existe pas
+	os.MkdirAll("../../uploads/avatars", 0755)
+	
+	// Générer un nom unique
+	filename := fmt.Sprintf("avatar_%s_%s", userID[:8], file.Filename)
+	filepath := fmt.Sprintf("../../uploads/avatars/%s", filename)
+	
+	if err := c.SaveFile(file, filepath); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Erreur sauvegarde"})
+	}
+	
+	avatarURL := fmt.Sprintf("/uploads/avatars/%s", filename)
+	
+	// Mettre à jour l'utilisateur (optionnel - stocker l'URL dans la DB)
+	h.service.UpdateAvatar(userID, avatarURL)
+	
+	return c.JSON(fiber.Map{
+		"message": "Photo mise a jour",
+		"avatar_url": avatarURL,
+	})
+}
+
+// PUT /api/v1/auth/profile
+func (h *AuthHandler) UpdateProfile(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(string)
+	
+	var input struct {
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Données invalides"})
+	}
+	
+	if err := h.service.UpdateProfile(userID, input.FirstName, input.LastName); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Erreur modification"})
+	}
+	
+	return c.JSON(fiber.Map{
+		"message": "Profil mis a jour",
+		"first_name": input.FirstName,
+		"last_name": input.LastName,
+	})
+}
+
+func logLogin(email, userID string) {
+    http.Post("http://localhost:8086/api/v1/admin/logs/login", "application/json",
+        strings.NewReader(fmt.Sprintf(`{"user_id":"%s","email":"%s","action":"login"}`, userID, email)))
+}
+
+import (
+	"bytes"
+	"net/http"
+)
+
+func logLogin(email, userID string) {
+	data := []byte(fmt.Sprintf(`{"user_id":"%s","user_email":"%s","action":"login","entity":"user","details":"Connexion"}`, userID, email))
+	http.Post("http://localhost:8086/api/v1/admin/logs/activity", "application/json", bytes.NewReader(data))
 }

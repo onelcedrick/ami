@@ -16,23 +16,25 @@ type ProxyHandler struct {
 
 func NewProxyHandler() *ProxyHandler {
 	return &ProxyHandler{
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		client: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
 func (h *ProxyHandler) ProxyToService(serviceURL, path string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		targetURL := strings.TrimRight(serviceURL, "/") + path
+		// Remplacer les paramètres dans le path (:id, :user_id, etc.)
+		targetPath := path
+		for _, param := range c.Route().Params {
+			targetPath = strings.Replace(targetPath, ":"+param, c.Params(param), 1)
+		}
+		
+		targetURL := strings.TrimRight(serviceURL, "/") + targetPath
 		
 		if query := string(c.Request().URI().QueryString()); query != "" {
 			targetURL += "?" + query
 		}
 
-		// Obtenir le body directement du contexte HTTP
 		bodyBytes := c.Request().Body()
-		
 		log.Printf("🔄 %s %s → %s (%d bytes)", c.Method(), c.OriginalURL(), targetURL, len(bodyBytes))
 
 		var bodyReader io.Reader
@@ -46,11 +48,11 @@ func (h *ProxyHandler) ProxyToService(serviceURL, path string) fiber.Handler {
 		}
 
 		// Headers
-		ct := c.Get("Content-Type")
-		if ct == "" {
-			ct = "application/json"
+		if ct := c.Get("Content-Type"); ct != "" {
+			req.Header.Set("Content-Type", ct)
+		} else if len(bodyBytes) > 0 {
+			req.Header.Set("Content-Type", "application/json")
 		}
-		req.Header.Set("Content-Type", ct)
 		
 		if auth := c.Get("Authorization"); auth != "" {
 			req.Header.Set("Authorization", auth)

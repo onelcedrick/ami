@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/am-info/order-service/internal/model"
@@ -14,109 +13,69 @@ type OrderRepository struct {
 }
 
 func NewOrderRepository(db *gorm.DB) *OrderRepository {
+	db.Exec(`CREATE TABLE IF NOT EXISTS orders (
+		id VARCHAR(36) PRIMARY KEY, user_id VARCHAR(255) NOT NULL,
+		status VARCHAR(20) DEFAULT 'pending',
+		total_amount DECIMAL(10,2) DEFAULT 0,
+		created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
+	)`)
+	db.Exec(`CREATE TABLE IF NOT EXISTS order_items (
+		id VARCHAR(36) PRIMARY KEY, order_id VARCHAR(36) NOT NULL,
+		product_id VARCHAR(255) NOT NULL, product_name VARCHAR(255) NOT NULL,
+		quantity INT NOT NULL, unit_price DECIMAL(10,2) NOT NULL,
+		total DECIMAL(10,2) NOT NULL
+	)`)
 	return &OrderRepository{db: db}
 }
 
-func (r *OrderRepository) CreateOrder(order *model.Order) error {
-	order.OrderNumber = generateOrderNumber()
-	
-	if err := r.db.Exec(`INSERT INTO orders (id, user_id, order_number, status, subtotal, tax_amount, shipping_amount, discount_amount, total, currency, shipping_address, payment_method, payment_status, notes, created_at, updated_at) 
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-		order.ID, order.UserID, order.OrderNumber, order.Status, order.Subtotal,
-		order.TaxAmount, order.ShippingAmount, order.DiscountAmount, order.Total,
-		order.Currency, order.ShippingAddress, order.PaymentMethod, order.PaymentStatus, order.Notes).Error; err != nil {
-		return err
-	}
-	
-	for i := range order.Items {
-		order.Items[i].ID = uuid.New().String()
-		order.Items[i].OrderID = order.ID
-		if err := r.db.Exec(`INSERT INTO order_items (id, order_id, product_id, product_name, product_sku, product_price, quantity, total) 
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			order.Items[i].ID, order.Items[i].OrderID, order.Items[i].ProductID,
-			order.Items[i].ProductName, order.Items[i].ProductSKU, order.Items[i].ProductPrice,
-			order.Items[i].Quantity, order.Items[i].Total).Error; err != nil {
-			return err
-		}
-	}
-	
-	return nil
+func (r *OrderRepository) Create(order *model.Order) error {
+	order.ID = uuid.New().String()
+	return r.db.Create(order).Error
 }
 
-func (r *OrderRepository) GetOrderByID(orderID string) (*model.Order, error) {
-	var order model.Order
-	if err := r.db.Raw("SELECT * FROM orders WHERE id = ?", orderID).Scan(&order).Error; err != nil {
-		return nil, err
-	}
-	
-	var items []model.OrderItem
-	r.db.Raw("SELECT * FROM order_items WHERE order_id = ?", orderID).Scan(&items)
-	order.Items = items
-	
-	return &order, nil
-}
-
-func (r *OrderRepository) GetOrdersByUser(userID string, status string) ([]model.Order, error) {
+func (r *OrderRepository) GetByUser(userID string) ([]model.Order, error) {
 	var orders []model.Order
-	query := "SELECT * FROM orders WHERE user_id = ?"
-	args := []interface{}{userID}
-	
-	if status != "" {
-		query += " AND status = ?"
-		args = append(args, status)
-	}
-	query += " ORDER BY created_at DESC"
-	
-	if err := r.db.Raw(query, args...).Scan(&orders).Error; err != nil {
-		return nil, err
-	}
-	
+	r.db.Where("user_id = ?", userID).Order("created_at DESC").Find(&orders)
 	for i := range orders {
-		var items []model.OrderItem
-		r.db.Raw("SELECT * FROM order_items WHERE order_id = ?", orders[i].ID).Scan(&items)
-		orders[i].Items = items
+		r.db.Where("order_id = ?", orders[i].ID).Find(&orders[i].Items)
 	}
-	
 	return orders, nil
 }
 
-func (r *OrderRepository) GetAllOrders(status string, limit, offset int) ([]model.Order, int64, error) {
+func (r *OrderRepository) GetAll() ([]model.Order, error) {
 	var orders []model.Order
-	var total int64
-	
-	r.db.Raw("SELECT COUNT(*) FROM orders").Scan(&total)
-	
-	query := "SELECT * FROM orders"
-	args := []interface{}{}
-	if status != "" {
-		query += " WHERE status = ?"
-		args = append(args, status)
+	r.db.Order("created_at DESC").Find(&orders)
+	return orders, nil
+}
+
+func (r *OrderRepository) GetByID(orderID string) (*model.Order, error) {
+	var order model.Order
+	err := r.db.First(&order, "id = ?", orderID).Error
+	if err == nil {
+		r.db.Where("order_id = ?", orderID).Find(&order.Items)
 	}
-	query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
-	
-	if err := r.db.Raw(query, args...).Scan(&orders).Error; err != nil {
-		return nil, 0, err
-	}
-	
-	for i := range orders {
-		var items []model.OrderItem
-		r.db.Raw("SELECT * FROM order_items WHERE order_id = ?", orders[i].ID).Scan(&items)
-		orders[i].Items = items
-	}
-	
-	return orders, total, nil
+	return &order, err
 }
 
 func (r *OrderRepository) UpdateStatus(orderID, status string) error {
-	return r.db.Exec("UPDATE orders SET status = ?, updated_at = NOW() WHERE id = ?", status, orderID).Error
+	return r.db.Model(&model.Order{}).Where("id = ?", orderID).Updates(map[string]interface{}{
+		"status": status, "updated_at": time.Now(),
+	}).Error
 }
 
-func (r *OrderRepository) UpdatePaymentStatus(orderID, paymentStatus, paymentID string) error {
-	return r.db.Exec("UPDATE orders SET payment_status = ?, payment_id = ?, updated_at = NOW() WHERE id = ?", paymentStatus, paymentID, orderID).Error
+func (r *OrderRepository) Delete(orderID string) error {
+	r.db.Where("order_id = ?", orderID).Delete(&model.OrderItem{})
+	return r.db.Delete(&model.Order{}, "id = ?", orderID).Error
 }
 
-func generateOrderNumber() string {
-	now := time.Now()
-	return fmt.Sprintf("AM-%s-%s", now.Format("20060102"), uuid.New().String()[:8])
+func (r *OrderRepository) GetAllOrders() ([]model.Order, error) {
+	var orders []model.Order
+	r.db.Order("created_at DESC").Find(&orders)
+	for i := range orders {
+		var items []model.OrderItem
+		r.db.Where("order_id = ?", orders[i].ID).Find(&items)
+		orders[i].Items = items
+	}
+	return orders, nil
 }
+

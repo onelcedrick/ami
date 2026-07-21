@@ -1,2 +1,2 @@
-import LoginPage from '@/pages/auth/LoginPage';
+import LoginPage from '@/src/pages/auth/LoginPage';
 export default function Page() { return <LoginPage />; }

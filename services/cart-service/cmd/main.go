@@ -28,20 +28,14 @@ func main() {
 		log.Fatal("❌ Erreur connexion DB:", err)
 	}
 
-	if err := db.AutoMigrate(&model.CartItem{}); err != nil {
-		log.Fatal("❌ Erreur migration:", err)
-	}
-
+	db.AutoMigrate(&model.CartItem{})
 	log.Println("✅ Cart Service: Database connectée")
 
 	repo := repository.NewCartRepository(db)
 	cartService := service.NewCartService(repo)
 	cartHandler := handler.NewCartHandler(cartService)
 
-	app := fiber.New(fiber.Config{
-		AppName: "AM Info - Cart Service",
-	})
-
+	app := fiber.New(fiber.Config{AppName: "AM Info - Cart Service"})
 	app.Use(recover.New())
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
@@ -54,7 +48,6 @@ func main() {
 		return c.JSON(fiber.Map{"status": "ok", "service": "cart-service"})
 	})
 
-	// Toutes les routes protégées par JWT
 	api := app.Group("/api/v1/cart")
 	api.Use(middleware.AuthMiddleware)
 

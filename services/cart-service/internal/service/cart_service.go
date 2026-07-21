@@ -10,7 +10,6 @@ import (
 	"github.com/am-info/cart-service/internal/model"
 	"github.com/am-info/cart-service/internal/repository"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 type CartService struct {
@@ -28,7 +27,7 @@ func (s *CartService) GetCart(userID string) (*model.CartResponse, error) {
 	}
 
 	var cartItems []model.CartItemResponse
-	totalPrice := 0.0
+	total := 0.0
 
 	for _, item := range items {
 		product, err := s.getProductInfo(item.ProductID)
@@ -36,15 +35,18 @@ func (s *CartService) GetCart(userID string) (*model.CartResponse, error) {
 			continue
 		}
 
-		subtotal := product.Price * float64(item.Quantity)
-		totalPrice += subtotal
+		itemTotal := product.Price * float64(item.Quantity)
+		total += itemTotal
 
 		cartItems = append(cartItems, model.CartItemResponse{
-			ID:        item.ID,
-			ProductID: item.ProductID,
-			Product:   *product,
-			Quantity:  item.Quantity,
-			Subtotal:  subtotal,
+			ID:          item.ID,
+			ProductID:   item.ProductID,
+			ProductName: product.Name,
+			Quantity:    item.Quantity,
+			UnitPrice:   product.Price,
+			Total:       itemTotal,
+			ImageURL:    product.ImageURL,
+			Stock:       product.Stock,
 		})
 	}
 
@@ -53,13 +55,13 @@ func (s *CartService) GetCart(userID string) (*model.CartResponse, error) {
 	}
 
 	return &model.CartResponse{
-		Items:      cartItems,
-		TotalItems: len(cartItems),
-		TotalPrice: totalPrice,
+		Items: cartItems,
+		Total: total,
+		Count: len(cartItems),
 	}, nil
 }
 
-func (s *CartService) AddToCart(userID string, req model.AddToCartRequest) (*model.CartItem, error) {
+func (s *CartService) AddToCart(userID string, req model.AddToCartRequest) (*model.CartResponse, error) {
 	product, err := s.getProductInfo(req.ProductID)
 	if err != nil {
 		return nil, errors.New("produit non trouvé")
@@ -69,47 +71,37 @@ func (s *CartService) AddToCart(userID string, req model.AddToCartRequest) (*mod
 		req.Quantity = 1
 	}
 
-	// Vérifier si le produit est déjà dans le panier
 	existingItem, err := s.repo.FindByUserAndProduct(userID, req.ProductID)
 	if err == nil {
-		// Mettre à jour la quantité
 		newQty := existingItem.Quantity + req.Quantity
 		if newQty > product.Stock {
 			return nil, fmt.Errorf("stock insuffisant: %d disponible(s)", product.Stock)
 		}
 		s.repo.UpdateQuantity(existingItem.ID, newQty)
-		existingItem.Quantity = newQty
-		return existingItem, nil
+	} else {
+		item := &model.CartItem{
+			ID:        uuid.New().String(),
+			UserID:    userID,
+			ProductID: req.ProductID,
+			Quantity:  req.Quantity,
+		}
+		s.repo.Create(item)
 	}
 
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
-
-	// Nouvel article
-	item := &model.CartItem{
-		ID:        uuid.New().String(),
-		UserID:    userID,
-		ProductID: req.ProductID,
-		Quantity:  req.Quantity,
-	}
-
-	if err := s.repo.Create(item); err != nil {
-		return nil, fmt.Errorf("erreur ajout au panier: %w", err)
-	}
-
-	return item, nil
+	return s.GetCart(userID)
 }
 
-func (s *CartService) UpdateQuantity(userID, itemID string, quantity int) error {
+func (s *CartService) UpdateQuantity(userID, itemID string, quantity int) (*model.CartResponse, error) {
 	if quantity <= 0 {
-		return errors.New("la quantité doit être supérieure à 0")
+		return nil, errors.New("la quantité doit être supérieure à 0")
 	}
-	return s.repo.UpdateQuantity(itemID, quantity)
+	s.repo.UpdateQuantity(itemID, quantity)
+	return s.GetCart(userID)
 }
 
-func (s *CartService) RemoveItem(userID, itemID string) error {
-	return s.repo.RemoveItem(userID, itemID)
+func (s *CartService) RemoveItem(userID, itemID string) (*model.CartResponse, error) {
+	s.repo.RemoveItem(userID, itemID)
+	return s.GetCart(userID)
 }
 
 func (s *CartService) ClearCart(userID string) error {

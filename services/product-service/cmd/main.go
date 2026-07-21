@@ -7,6 +7,7 @@ import (
 
 	"github.com/am-info/product-service/internal/handler"
 	"github.com/am-info/product-service/internal/model"
+	"github.com/am-info/product-service/internal/discount"
 	"github.com/am-info/product-service/internal/repository"
 	"github.com/am-info/product-service/internal/service"
 	"github.com/gofiber/fiber/v2"
@@ -53,8 +54,14 @@ func main() {
 	ctx := context.Background()
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		log.Println("⚠️  Redis non disponible:", err)
+    // Initialiser le DiscountEngine (Strategy Pattern)
+    discount.GetDiscountEngine("http://localhost:8086")
+    log.Println("🏷️  DiscountEngine activé")
 	} else {
 		log.Println("✅ Redis connecté")
+    // Initialiser le DiscountEngine (Strategy Pattern)
+    discount.GetDiscountEngine("http://localhost:8086")
+    log.Println("🏷️  DiscountEngine activé")
 	}
 
 	repo := repository.NewProductRepository(db)
@@ -70,26 +77,34 @@ func main() {
 	app.Use(recover.New())
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
-		AllowMethods: "GET,POST,PUT,DELETE",
-		AllowHeaders: "Origin,Content-Type,Accept,Authorization",
+		AllowOrigins:  "*",
+		AllowMethods:  "GET,POST,PUT,DELETE,OPTIONS",
+		AllowHeaders:  "Origin,Content-Type,Accept,Authorization,X-User-ID,X-User-Role",
 	}))
 
 	app.Get("/health", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"status":  "ok",
-			"service": "product-service",
-		})
+		return c.JSON(fiber.Map{"status": "ok", "service": "product-service"})
 	})
 
 	api := app.Group("/api/v1")
+
+	// Routes publiques
 	api.Get("/products", productHandler.GetProducts)
 	api.Get("/products/featured", productHandler.GetFeaturedProducts)
 	api.Get("/products/:id", productHandler.GetProduct)
+    api.Get("/products/:id/also-bought", productHandler.GetAlsoBought)
+	api.Get("/categories", productHandler.GetCategories)
+    api.Get("/invalidate-cache", productHandler.InvalidateCache)
+    api.Post("/categories", productHandler.CreateCategory)
+    api.Put("/categories/:id", productHandler.UpdateCategory)
+    api.Delete("/categories/:id", productHandler.DeleteCategory)
+
+	// Routes admin (CRUD)
 	api.Post("/products", productHandler.CreateProduct)
 	api.Put("/products/:id", productHandler.UpdateProduct)
 	api.Delete("/products/:id", productHandler.DeleteProduct)
-	api.Get("/categories", productHandler.GetCategories)
+    api.Patch("/products/:id/visibility", productHandler.ToggleVisibility)
+    api.Patch("/products/:id/stock", productHandler.UpdateStock)
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -101,11 +116,9 @@ func main() {
 }
 
 func seedData(db *gorm.DB) {
-	// Vérifier si des produits existent déjà
 	var count int64
 	db.Model(&model.Product{}).Count(&count)
 	if count > 0 {
-		log.Println("📦 Données déjà existantes, skip seed")
 		return
 	}
 
@@ -120,48 +133,13 @@ func seedData(db *gorm.DB) {
 	db.Create(&categories)
 
 	products := []model.Product{
-		{
-			Name: "MacBook Pro 16\"", Slug: "macbook-pro-16",
-			Description: "Ordinateur portable puissant avec puce M3",
-			Price: 2499.99, SKU: "MBP16-M3-001", StockQuantity: 15,
-			CategoryID: &categories[0].ID, Brand: "Apple", IsFeatured: true,
-		},
-		{
-			Name: "iPhone 15 Pro", Slug: "iphone-15-pro",
-			Description: "Smartphone haut de gamme",
-			Price: 1199.99, SKU: "IP15P-001", StockQuantity: 30,
-			CategoryID: &categories[1].ID, Brand: "Apple", IsFeatured: true,
-		},
-		{
-			Name: "Sony WH-1000XM5", Slug: "sony-wh1000xm5",
-			Description: "Casque audio sans fil avec réduction de bruit",
-			Price: 349.99, SKU: "SONY-XM5-001", StockQuantity: 50,
-			CategoryID: &categories[2].ID, Brand: "Sony",
-		},
-		{
-			Name: "Dell XPS 15", Slug: "dell-xps-15",
-			Description: "PC portable premium",
-			Price: 1799.99, SKU: "DELL-XPS15-001", StockQuantity: 10,
-			CategoryID: &categories[0].ID, Brand: "Dell",
-		},
-		{
-			Name: "Samsung Galaxy S24", Slug: "samsung-galaxy-s24",
-			Description: "Smartphone Android premium",
-			Price: 899.99, SKU: "SAM-S24-001", StockQuantity: 25,
-			CategoryID: &categories[1].ID, Brand: "Samsung",
-		},
-		{
-			Name: "Logitech G Pro X", Slug: "logitech-g-pro-x",
-			Description: "Casque gaming sans fil",
-			Price: 199.99, SKU: "LOG-GPX-001", StockQuantity: 40,
-			CategoryID: &categories[3].ID, Brand: "Logitech",
-		},
-		{
-			Name: "AirPods Pro 2", Slug: "airpods-pro-2",
-			Description: "Écouteurs sans fil avec réduction de bruit",
-			Price: 279.99, SKU: "APP-AP2-001", StockQuantity: 60,
-			CategoryID: &categories[2].ID, Brand: "Apple",
-		},
+		{Name: "MacBook Pro 16\"", Slug: "macbook-pro-16", Description: "Ordinateur portable puissant avec puce M3", Price: 2499.99, SKU: "MBP16-M3-001", StockQuantity: 15, CategoryID: &categories[0].ID, Brand: "Apple", IsFeatured: true},
+		{Name: "iPhone 15 Pro", Slug: "iphone-15-pro", Description: "Smartphone haut de gamme", Price: 1199.99, SKU: "IP15P-001", StockQuantity: 30, CategoryID: &categories[1].ID, Brand: "Apple", IsFeatured: true},
+		{Name: "Sony WH-1000XM5", Slug: "sony-wh1000xm5", Description: "Casque audio sans fil", Price: 349.99, SKU: "SONY-XM5-001", StockQuantity: 50, CategoryID: &categories[2].ID, Brand: "Sony"},
+		{Name: "Dell XPS 15", Slug: "dell-xps-15", Description: "PC portable premium", Price: 1799.99, SKU: "DELL-XPS15-001", StockQuantity: 10, CategoryID: &categories[0].ID, Brand: "Dell"},
+		{Name: "Samsung Galaxy S24", Slug: "samsung-galaxy-s24", Description: "Smartphone Android", Price: 899.99, SKU: "SAM-S24-001", StockQuantity: 25, CategoryID: &categories[1].ID, Brand: "Samsung"},
+		{Name: "Logitech G Pro X", Slug: "logitech-g-pro-x", Description: "Casque gaming", Price: 199.99, SKU: "LOG-GPX-001", StockQuantity: 40, CategoryID: &categories[3].ID, Brand: "Logitech"},
+		{Name: "AirPods Pro 2", Slug: "airpods-pro-2", Description: "Écouteurs sans fil", Price: 279.99, SKU: "APP-AP2-001", StockQuantity: 60, CategoryID: &categories[2].ID, Brand: "Apple"},
 	}
 	db.Create(&products)
 

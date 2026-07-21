@@ -65,3 +65,20 @@ volumes:
   postgres_data:
   redis_data:
   rabbitmq_data:
+
+  admin-service:
+    build: ./services/admin-service
+    container_name: aminfo-admin
+    ports:
+      - "8086:8086"
+    environment:
+      - PORT=8086
+      - AUTH_DATABASE_URL=postgresql://aminfo:aminfo123@postgres:5433/aminfo_auth?sslmode=disable
+      - ORDERS_DATABASE_URL=postgresql://aminfo:aminfo123@postgres:5433/aminfo_orders?sslmode=disable
+      - PRODUCTS_DATABASE_URL=postgresql://aminfo:aminfo123@postgres:5433/aminfo_products?sslmode=disable
+      - TICKETS_DATABASE_URL=postgresql://aminfo:aminfo123@postgres:5433/aminfo_tickets?sslmode=disable
+      - DISCOUNT_DATABASE_URL=postgresql://aminfo:aminfo123@postgres:5433/aminfo_orders?sslmode=disable
+    depends_on:
+      - postgres
+    networks:
+      - aminfo-network

@@ -77,6 +77,8 @@ func main() {
 	protected := api.Group("")
 	protected.Use(authMiddleware.RequireAuth)
 	protected.Get("/me", authHandler.GetProfile)
+    protected.Post("/avatar", authHandler.UploadAvatar)
+    protected.Put("/profile", authHandler.UpdateProfile)
 
 	port := os.Getenv("PORT")
 	if port == "" {

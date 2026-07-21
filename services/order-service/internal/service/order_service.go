@@ -20,192 +20,130 @@ func NewOrderService(repo *repository.OrderRepository) *OrderService {
 	return &OrderService{repo: repo}
 }
 
-func (s *OrderService) CreateOrder(userID string, req model.CreateOrderRequest) (*model.Order, error) {
+type CartResponse struct {
+	Items []CartItemInfo `json:"items"`
+}
+
+type CartItemInfo struct {
+	ProductName string  `json:"product_name"`
+	ProductID   string  `json:"product_id"`
+	UnitPrice   float64 `json:"unit_price"`
+	Quantity    int     `json:"quantity"`
+	Stock       int     `json:"stock"`
+}
+
+func (s *OrderService) CreateOrder(userID string) (*model.Order, error) {
 	cartItems, err := s.getCartItems(userID)
-	if err != nil {
-		return nil, fmt.Errorf("impossible de récupérer le panier: %w", err)
+	if err != nil || len(cartItems) == 0 {
+		return nil, errors.New("panier vide")
 	}
 
-	if len(cartItems) == 0 {
-		return nil, errors.New("le panier est vide")
+	order := &model.Order{
+		UserID: userID,
+		Status: model.StatusAwaitingPayment,
 	}
 
-	fmt.Printf("📦 %d articles dans le panier\n", len(cartItems))
-
-	var subtotal float64
+	var totalAmount float64
 	var orderItems []model.OrderItem
 
 	for _, item := range cartItems {
-		productTotal := item.ProductPrice * float64(item.Quantity)
-		subtotal += productTotal
+		lineTotal := item.UnitPrice * float64(item.Quantity)
+		totalAmount += lineTotal
 
 		orderItems = append(orderItems, model.OrderItem{
-			ProductID:    item.ProductID,
-			ProductName:  item.ProductName,
-			ProductSKU:   item.ProductSKU,
-			ProductPrice: item.ProductPrice,
-			Quantity:     item.Quantity,
-			Total:        productTotal,
+			ID:          uuid.New().String(),
+			OrderID:     "", // sera rempli après création
+			ProductID:   item.ProductID,
+			ProductName: item.ProductName,
+			Quantity:    item.Quantity,
+			UnitPrice:   item.UnitPrice,
+			Total:       lineTotal,
 		})
 	}
 
-	taxAmount := subtotal * 0.20
-	shippingAmount := 5.99
-	if subtotal > 100 {
-		shippingAmount = 0
-	}
-	total := subtotal + taxAmount + shippingAmount
+	order.TotalAmount = totalAmount
+	order.Items = orderItems
+	order.ID = uuid.New().String()
 
-	order := &model.Order{
-		ID:              uuid.New().String(),
-		UserID:          userID,
-		Status:          model.StatusPending,
-		Subtotal:        subtotal,
-		TaxAmount:       taxAmount,
-		ShippingAmount:  shippingAmount,
-		Total:           total,
-		Currency:        "EUR",
-		ShippingAddress: req.ShippingAddress,
-		PaymentMethod:   req.PaymentMethod,
-		PaymentStatus:   model.PaymentPending,
-		Notes:           req.Notes,
-		Items:           orderItems,
+	if err := s.repo.Create(order); err != nil {
+		return nil, err
 	}
 
-	if err := s.repo.CreateOrder(order); err != nil {
-		return nil, fmt.Errorf("erreur création commande: %w", err)
+	// Mettre à jour les OrderID des items
+	for i := range orderItems {
+		orderItems[i].OrderID = order.ID
 	}
 
+	// Vider le panier
 	s.clearCart(userID)
 
 	return order, nil
 }
 
+func (s *OrderService) GetUserOrders(userID string) ([]model.Order, error) {
+	return s.repo.GetByUser(userID)
+}
+
+func (s *OrderService) GetAllOrders() ([]model.Order, error) {
+	return s.repo.GetAll()
+}
+
 func (s *OrderService) GetOrder(orderID string) (*model.Order, error) {
-	return s.repo.GetOrderByID(orderID)
+	return s.repo.GetByID(orderID)
 }
 
-func (s *OrderService) GetUserOrders(userID string, status string) ([]model.Order, error) {
-	return s.repo.GetOrdersByUser(userID, status)
-}
-
-func (s *OrderService) GetAllOrders(status string, page, limit int) ([]model.Order, int64, error) {
-	if page < 1 {
-		page = 1
+func (s *OrderService) CancelOrder(userID, orderID string) error {
+	order, err := s.repo.GetByID(orderID)
+	if err != nil {
+		return errors.New("commande introuvable")
 	}
-	if limit < 1 || limit > 100 {
-		limit = 20
+	if order.UserID != userID {
+		return errors.New("non autorise")
 	}
-	offset := (page - 1) * limit
-	return s.repo.GetAllOrders(status, limit, offset)
+	if order.Status != model.StatusPending && order.Status != model.StatusAwaitingPayment {
+		return errors.New("seules les commandes en attente peuvent etre annulees")
+	}
+	return s.repo.UpdateStatus(orderID, model.StatusCancelled)
 }
 
 func (s *OrderService) UpdateStatus(orderID, status string) error {
 	return s.repo.UpdateStatus(orderID, status)
 }
 
-func (s *OrderService) ProcessPayment(orderID string, req model.PaymentRequest) error {
-	order, err := s.repo.GetOrderByID(orderID)
-	if err != nil {
-		return errors.New("commande non trouvée")
-	}
-
-	if order.PaymentStatus == model.PaymentPaid {
-		return errors.New("commande déjà payée")
-	}
-
-	paymentID := "PAY-" + uuid.New().String()[:12]
-	paymentStatus := model.PaymentPaid
-	orderStatus := model.StatusConfirmed
-
-	s.repo.UpdateStatus(orderID, orderStatus)
-	return s.repo.UpdatePaymentStatus(orderID, paymentStatus, paymentID)
-}
-
-func (s *OrderService) CancelOrder(orderID string) error {
-	order, err := s.repo.GetOrderByID(orderID)
-	if err != nil {
-		return errors.New("commande non trouvée")
-	}
-
-	if order.Status == model.StatusShipped || order.Status == model.StatusDelivered {
-		return errors.New("impossible d'annuler une commande expédiée")
-	}
-
-	return s.repo.UpdateStatus(orderID, model.StatusCancelled)
-}
-
-type CartItemInfo struct {
-	ProductID    string  `json:"product_id"`
-	ProductName  string  `json:"product_name"`
-	ProductPrice float64 `json:"product_price"`
-	ProductSKU   string  `json:"product_sku"`
-	Quantity     int     `json:"quantity"`
-}
-
 func (s *OrderService) getCartItems(userID string) ([]CartItemInfo, error) {
-	cartServiceURL := os.Getenv("CART_SERVICE_URL")
-	if cartServiceURL == "" {
-		cartServiceURL = "http://localhost:8083"
-	}
+	cartURL := os.Getenv("CART_SERVICE_URL")
+	if cartURL == "" { cartURL = "http://localhost:8083" }
 
-	url := fmt.Sprintf("%s/api/v1/cart", cartServiceURL)
-	
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
+	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/cart/", cartURL), nil)
 	req.Header.Set("X-User-ID", userID)
 	
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("erreur connexion cart service: %w", err)
+	token := os.Getenv("TOKEN")
+	if token == "" {
+		// Essayer de récupérer le token du contexte
+		token = req.Header.Get("Authorization")
 	}
+	
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil { return nil, err }
 	defer resp.Body.Close()
 
-	var cartResponse struct {
-		Items []struct {
-			ProductID string `json:"product_id"`
-			Product   struct {
-				ID    string  `json:"id"`
-				Name  string  `json:"name"`
-				Price float64 `json:"price"`
-				SKU   string  `json:"sku"`
-			} `json:"product"`
-			Quantity int `json:"quantity"`
-		} `json:"items"`
+	var cart CartResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cart); err != nil {
+		return nil, err
 	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&cartResponse); err != nil {
-		return nil, fmt.Errorf("erreur décodage panier: %w", err)
+	
+	fmt.Printf("📦 %d articles dans le panier\n", len(cart.Items))
+	for _, item := range cart.Items {
+		fmt.Printf("  → %s (x%d) = %.2f\n", item.ProductName, item.Quantity, item.UnitPrice*float64(item.Quantity))
 	}
-
-	var items []CartItemInfo
-	for _, item := range cartResponse.Items {
-		items = append(items, CartItemInfo{
-			ProductID:    item.ProductID,
-			ProductName:  item.Product.Name,
-			ProductPrice: item.Product.Price,
-			ProductSKU:   item.Product.SKU,
-			Quantity:     item.Quantity,
-		})
-		fmt.Printf("  → %s (x%d) = %.2f€\n", item.Product.Name, item.Quantity, item.Product.Price*float64(item.Quantity))
-	}
-
-	return items, nil
+	
+	return cart.Items, nil
 }
 
-func (s *OrderService) clearCart(userID string) error {
-	cartServiceURL := os.Getenv("CART_SERVICE_URL")
-	if cartServiceURL == "" {
-		cartServiceURL = "http://localhost:8083"
-	}
-
-	url := fmt.Sprintf("%s/api/v1/cart", cartServiceURL)
-	req, _ := http.NewRequest("DELETE", url, nil)
+func (s *OrderService) clearCart(userID string) {
+	cartURL := os.Getenv("CART_SERVICE_URL")
+	if cartURL == "" { cartURL = "http://localhost:8083" }
+	req, _ := http.NewRequest("DELETE", fmt.Sprintf("%s/api/v1/cart/", cartURL), nil)
 	req.Header.Set("X-User-ID", userID)
-	
-	_, err := http.DefaultClient.Do(req)
-	return err
+	http.DefaultClient.Do(req)
 }

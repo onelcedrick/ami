@@ -45,3 +45,14 @@ func (r *UserRepository) EmailExists(email string) bool {
 	r.db.Model(&model.User{}).Where("email = ?", email).Count(&count)
 	return count > 0
 }
+
+func (r *UserRepository) UpdateProfile(userID, firstName, lastName string) error {
+	return r.db.Model(&model.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"first_name": firstName,
+		"last_name":  lastName,
+	}).Error
+}
+
+func (r *UserRepository) UpdateAvatar(userID, avatarURL string) error {
+	return r.db.Model(&model.User{}).Where("id = ?", userID).Update("avatar_url", avatarURL).Error
+}

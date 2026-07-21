@@ -11,6 +11,7 @@ type User struct {
 	FirstName      string    `gorm:"not null" json:"first_name"`
 	LastName       string    `gorm:"not null" json:"last_name"`
 	Phone          string    `json:"phone,omitempty"`
+    AvatarURL     string    `json:"avatar_url,omitempty"`
 	Role           string    `gorm:"default:client;check:role IN ('client','technician','admin')" json:"role"`
 	IsActive       bool      `gorm:"default:true" json:"is_active"`
 	EmailVerified  bool      `gorm:"default:false" json:"email_verified"`
@@ -26,6 +27,7 @@ type RegisterRequest struct {
 	FirstName string `json:"first_name" validate:"required"`
 	LastName  string `json:"last_name" validate:"required"`
 	Phone     string `json:"phone,omitempty"`
+    AvatarURL     string    `json:"avatar_url,omitempty"`
 }
 
 type LoginRequest struct {
@@ -46,5 +48,6 @@ type UserResponse struct {
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
 	Phone     string `json:"phone,omitempty"`
+    AvatarURL     string    `json:"avatar_url,omitempty"`
 	Role      string `json:"role"`
 }

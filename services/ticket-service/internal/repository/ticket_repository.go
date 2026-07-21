@@ -155,3 +155,4 @@ func (r *TicketRepository) MarkAsRead(ticketID, userID string) error {
 		WHERE ticket_id = ? AND sender_id != ? AND is_read = false`,
 		ticketID, userID).Error
 }
+

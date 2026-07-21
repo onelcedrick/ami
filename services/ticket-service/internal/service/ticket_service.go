@@ -12,10 +12,10 @@ import (
 
 type TicketService struct {
 	repo  *repository.TicketRepository
-	wsHub *WebSocketHub
+	
 }
 
-func NewTicketService(repo *repository.TicketRepository, wsHub *WebSocketHub) *TicketService {
+func NewTicketService(repo *repository.TicketRepository, ) *TicketService {
 	return &TicketService{
 		repo:  repo,
 		wsHub: wsHub,
@@ -50,7 +50,7 @@ func (s *TicketService) CreateTicket(clientID string, req model.CreateTicketRequ
 	}
 
 	// Notifier les techniciens
-	s.wsHub.BroadcastToRole(model.RoleTechnician, map[string]interface{}{
+	// s.wsHub.BroadcastToRole(model.RoleTechnician, map[string]interface{}{
 		"type":    "new_ticket",
 		"ticket":  ticket,
 		"message": fmt.Sprintf("Nouveau ticket: %s", ticket.Subject),
@@ -69,7 +69,7 @@ func (s *TicketService) GetTickets(userID, role, status string) ([]model.Ticket,
 	case model.RoleClient:
 		return s.repo.FindByClientID(userID, status)
 	case model.RoleTechnician:
-		return s.repo.FindByTechnicianID(userID, status)
+		return s.repo.FindAll(status, "")
 	case model.RoleAdmin:
 		return s.repo.FindAll(status, "")
 	default:
@@ -108,7 +108,7 @@ func (s *TicketService) AddMessage(ticketID, senderID, senderRole string, req mo
 		notifyUserID = *ticket.TechnicianID
 	}
 
-	s.wsHub.SendToUser(notifyUserID, map[string]interface{}{
+	// s.wsHub.SendToUser(notifyUserID, map[string]interface{}{
 		"type":      "new_message",
 		"ticket_id": ticketID,
 		"message":   msg,
@@ -151,7 +151,7 @@ func (s *TicketService) UpdateStatus(ticketID, newStatus string) error {
 	}
 
 	// Notifier le client
-	s.wsHub.SendToUser(ticket.ClientID, map[string]interface{}{
+	// s.wsHub.SendToUser(ticket.ClientID, map[string]interface{}{
 		"type":      "status_changed",
 		"ticket_id": ticketID,
 		"status":    newStatus,
@@ -167,7 +167,7 @@ func (s *TicketService) AssignTechnician(ticketID, techID string) error {
 	}
 
 	ticket, _ := s.repo.FindByID(ticketID)
-	s.wsHub.SendToUser(ticket.ClientID, map[string]interface{}{
+	// s.wsHub.SendToUser(ticket.ClientID, map[string]interface{}{
 		"type":      "technician_assigned",
 		"ticket_id": ticketID,
 	})

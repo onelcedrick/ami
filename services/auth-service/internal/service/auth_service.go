@@ -115,6 +115,7 @@ func (s *AuthService) Login(req model.LoginRequest) (*model.LoginResponse, error
 			LastName:  user.LastName,
 			Phone:     user.Phone,
 			Role:      user.Role,
+		AvatarURL: user.AvatarURL,
 		},
 	}, nil
 }
@@ -132,6 +133,7 @@ func (s *AuthService) GetUserByID(id string) (*model.UserResponse, error) {
 		LastName:  user.LastName,
 		Phone:     user.Phone,
 		Role:      user.Role,
+		AvatarURL: user.AvatarURL,
 	}, nil
 }
 
@@ -318,4 +320,13 @@ func savePublicKey(path string, key *rsa.PublicKey) error {
 		Type:  "PUBLIC KEY",
 		Bytes: pubBytes,
 	})
+}
+
+func (s *AuthService) UpdateProfile(userID, firstName, lastName string) error {
+	return s.repo.UpdateProfile(userID, firstName, lastName)
+}
+
+
+func (s *AuthService) UpdateAvatar(userID, avatarURL string) error {
+	return s.repo.UpdateAvatar(userID, avatarURL)
 }

@@ -4,7 +4,6 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"log"
 	"os"
 	"strings"
 
@@ -21,40 +20,33 @@ func init() {
 		if err == nil {
 			block, _ := pem.Decode(keyData)
 			if block != nil {
-				pubKey, err := x509.ParsePKIXPublicKey(block.Bytes)
-				if err == nil {
+				pubKey, _ := x509.ParsePKIXPublicKey(block.Bytes)
+				if pubKey != nil {
 					publicKey = pubKey.(*rsa.PublicKey)
-					log.Println("✅ Order Service: Clé JWT chargée depuis", p)
 					return
 				}
 			}
 		}
 	}
-	log.Println("⚠️ Order Service: Pas de clé JWT, utilisation X-User-ID")
 }
 
 func AuthMiddleware(c *fiber.Ctx) error {
-	// 1. Essayer JWT
 	authHeader := c.Get("Authorization")
 	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") && publicKey != nil {
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			return publicKey, nil
-		})
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) { return publicKey, nil })
 		if err == nil && token.Valid {
-			if claims, ok := token.Claims.(jwt.MapClaims); ok {
-				c.Locals("user_id", claims["sub"].(string))
-				c.Locals("user_role", claims["role"].(string))
-				return c.Next()
-			}
+			claims := token.Claims.(jwt.MapClaims)
+			c.Locals("user_id", claims["sub"])
+			c.Locals("user_role", claims["role"])
+			return c.Next()
 		}
 	}
 
-	// 2. Fallback X-User-ID
 	userID := c.Get("X-User-ID")
 	if userID != "" {
 		c.Locals("user_id", userID)
-		c.Locals("user_role", c.Get("X-User-Role", "client"))
+		c.Locals("user_role", "client")
 		return c.Next()
 	}
 

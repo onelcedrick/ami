@@ -6,6 +6,7 @@ import (
 
 	"github.com/am-info/order-service/internal/handler"
 	"github.com/am-info/order-service/internal/middleware"
+	"github.com/am-info/order-service/internal/model"
 	"github.com/am-info/order-service/internal/repository"
 	"github.com/am-info/order-service/internal/service"
 	"github.com/gofiber/fiber/v2"
@@ -27,25 +28,8 @@ func main() {
 		log.Fatal("❌ Erreur connexion DB:", err)
 	}
 
-	// Créer les tables si nécessaire
-	db.Exec(`CREATE TABLE IF NOT EXISTS orders (
-		id VARCHAR(36) PRIMARY KEY, user_id VARCHAR(255) NOT NULL,
-		order_number VARCHAR(20) NOT NULL UNIQUE, status VARCHAR(20) DEFAULT 'pending',
-		subtotal NUMERIC(10,2) NOT NULL, tax_amount NUMERIC(10,2) DEFAULT 0,
-		shipping_amount NUMERIC(10,2) DEFAULT 0, discount_amount NUMERIC(10,2) DEFAULT 0,
-		total NUMERIC(10,2) NOT NULL, currency VARCHAR(3) DEFAULT 'EUR',
-		shipping_address TEXT, payment_method VARCHAR(50),
-		payment_status VARCHAR(20) DEFAULT 'pending', payment_id VARCHAR(255),
-		notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
-	)`)
-	db.Exec(`CREATE TABLE IF NOT EXISTS order_items (
-		id VARCHAR(36) PRIMARY KEY, order_id VARCHAR(36) NOT NULL,
-		product_id VARCHAR(255) NOT NULL, product_name VARCHAR(255) NOT NULL,
-		product_sku VARCHAR(100), product_price NUMERIC(10,2) NOT NULL,
-		quantity INT NOT NULL, total NUMERIC(10,2) NOT NULL
-	)`)
-	db.Exec(`CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id)`)
-	db.Exec(`CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id)`)
+	// Recréer les tables avec les bons champs
+	db.AutoMigrate(&model.Order{}, &model.OrderItem{})
 
 	log.Println("✅ Order Service: Database connectée")
 
@@ -66,21 +50,17 @@ func main() {
 		return c.JSON(fiber.Map{"status": "ok", "service": "order-service"})
 	})
 
-	// Routes protégées
 	api := app.Group("/api/v1")
 	api.Use(middleware.AuthMiddleware)
 
 	api.Post("/orders", orderHandler.CreateOrder)
 	api.Get("/orders", orderHandler.GetUserOrders)
 	api.Get("/orders/:id", orderHandler.GetOrder)
-	api.Post("/orders/:id/pay", orderHandler.ProcessPayment)
 	api.Put("/orders/:id/cancel", orderHandler.CancelOrder)
 
-	// Admin
-	admin := app.Group("/api/v1/admin")
-	admin.Use(middleware.AuthMiddleware)
-	admin.Put("/orders/:id/status", orderHandler.UpdateStatus)
+	admin := api.Group("/admin")
 	admin.Get("/orders", orderHandler.GetAllOrders)
+	admin.Put("/orders/:id/status", orderHandler.UpdateStatus)
 
 	port := os.Getenv("PORT")
 	if port == "" {

@@ -9,6 +9,13 @@ import (
 	"github.com/am-info/product-service/internal/model"
 	"github.com/am-info/product-service/internal/repository"
 	"github.com/redis/go-redis/v9"
+	"io"
+	"net/http"
+	"io"
+	"net/http"
+	"encoding/json"
+	"io"
+	"net/http"
 )
 
 type ProductService struct {
@@ -17,21 +24,15 @@ type ProductService struct {
 }
 
 func NewProductService(repo *repository.ProductRepository, redis *redis.Client) *ProductService {
-	return &ProductService{
-		repo:  repo,
-		redis: redis,
-	}
+	return &ProductService{repo: repo, redis: redis}
 }
 
-// GetProducts retourne les produits avec cache Redis
 func (s *ProductService) GetProducts(params repository.ProductQueryParams) ([]model.Product, int64, error) {
-	// Clé cache
 	cacheKey := fmt.Sprintf("products:page:%d:limit:%d:cat:%s:sort:%s:search:%s",
 		params.Page, params.Limit, params.CategoryID, params.SortBy, params.Search)
 
 	ctx := context.Background()
 
-	// Vérifier le cache
 	if cached, err := s.redis.Get(ctx, cacheKey).Result(); err == nil {
 		var result struct {
 			Products []model.Product `json:"products"`
@@ -42,13 +43,11 @@ func (s *ProductService) GetProducts(params repository.ProductQueryParams) ([]mo
 		}
 	}
 
-	// Requête DB
 	products, total, err := s.repo.GetProducts(params)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// Mettre en cache (5 minutes)
 	result := struct {
 		Products []model.Product `json:"products"`
 		Total    int64           `json:"total"`
@@ -58,15 +57,14 @@ func (s *ProductService) GetProducts(params repository.ProductQueryParams) ([]mo
 		s.redis.Set(ctx, cacheKey, data, 5*time.Minute)
 	}
 
+    products = s.FetchAndApplyDiscounts(products)
 	return products, total, nil
 }
 
-// GetProduct retourne un produit avec cache
 func (s *ProductService) GetProduct(id string) (*model.Product, error) {
 	cacheKey := fmt.Sprintf("product:%s", id)
 	ctx := context.Background()
 
-	// Vérifier cache
 	if cached, err := s.redis.Get(ctx, cacheKey).Result(); err == nil {
 		var product model.Product
 		if err := json.Unmarshal([]byte(cached), &product); err == nil {
@@ -79,7 +77,6 @@ func (s *ProductService) GetProduct(id string) (*model.Product, error) {
 		return nil, err
 	}
 
-	// Cache 10 minutes
 	if data, err := json.Marshal(product); err == nil {
 		s.redis.Set(ctx, cacheKey, data, 10*time.Minute)
 	}
@@ -87,7 +84,6 @@ func (s *ProductService) GetProduct(id string) (*model.Product, error) {
 	return product, nil
 }
 
-// GetFeaturedProducts retourne les produits en vedette
 func (s *ProductService) GetFeaturedProducts() ([]model.Product, error) {
 	cacheKey := "products:featured"
 	ctx := context.Background()
@@ -111,7 +107,6 @@ func (s *ProductService) GetFeaturedProducts() ([]model.Product, error) {
 	return products, nil
 }
 
-// GetCategories retourne les catégories
 func (s *ProductService) GetCategories() ([]model.Category, error) {
 	cacheKey := "categories:all"
 	ctx := context.Background()
@@ -133,4 +128,91 @@ func (s *ProductService) GetCategories() ([]model.Category, error) {
 	}
 
 	return categories, nil
+}
+
+func (s *ProductService) InvalidateCache() {
+	ctx := context.Background()
+	s.redis.Del(ctx, "categories:all")
+	s.redis.Del(ctx, "products:featured")
+	keys, _ := s.redis.Keys(ctx, "products:*").Result()
+	for _, key := range keys {
+		s.redis.Del(ctx, key)
+	}
+)
+
+// FetchAndApplyDiscounts récupère les promotions depuis l'Admin Service
+func (s *ProductService) FetchAndApplyDiscounts(products []model.Product) []model.Product {
+	// Récupérer les promotions actives
+	req, _ := http.NewRequest("GET", "http://localhost:8086/api/v1/admin/discounts", nil)
+	req.Header.Set("X-User-ID", "admin")
+	req.Header.Set("X-User-Role", "admin")
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return products
+	}
+	defer resp.Body.Close()
+	
+	body, _ := io.ReadAll(resp.Body)
+	
+	var discounts []struct {
+		ID           string  `json:"id"`
+		Name         string  `json:"name"`
+		DiscountType string  `json:"discount_type"`
+		Value        float64 `json:"value"`
+		TargetType   string  `json:"target_type"`
+		TargetID     string  `json:"target_id"`
+		IsActive     bool    `json:"is_active"`
+	}
+	
+	json.Unmarshal(body, &discounts)
+	
+	for i := range products {
+		bestPrice := products[i].Price
+		bestDiscount := 0.0
+		
+		catID := ""
+		if products[i].CategoryID != nil {
+			catID = *products[i].CategoryID
+		}
+		
+		for _, d := range discounts {
+			if !d.IsActive { continue }
+			
+			applicable := false
+			switch d.TargetType {
+			case "global":
+				applicable = true
+			case "product":
+				applicable = (d.TargetID == products[i].ID)
+			case "category":
+				applicable = (d.TargetID == catID || d.TargetID == products[i].Category.Name)
+			}
+			
+			if applicable {
+				var newPrice float64
+				switch d.DiscountType {
+				case "percentage":
+					newPrice = products[i].Price * (1 - d.Value/100)
+				case "fixed_amount":
+					newPrice = products[i].Price - d.Value
+					if newPrice < 0 { newPrice = 0 }
+				}
+				
+				if newPrice < bestPrice {
+					bestPrice = newPrice
+					bestDiscount = d.Value
+				}
+			}
+		}
+		
+		// Appliquer la meilleure réduction trouvée
+		if bestPrice < products[i].Price {
+			originalPrice := products[i].Price
+			products[i].Price = bestPrice
+			products[i].ComparePrice = &originalPrice
+		}
+	}
+	
+	return products
 }

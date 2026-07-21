@@ -81,7 +81,9 @@ func main() {
 	api.Get("/tickets", ticketHandler.GetTickets)
 	api.Get("/tickets/unread-count", ticketHandler.GetUnreadCount)
 	api.Get("/tickets/:id", ticketHandler.GetTicket)
-	api.Post("/tickets/:id/messages", ticketHandler.AddMessage)
+    api.Get("/tickets/sla-rules", ticketHandler.GetSLARules)
+    api.Post("/tickets/:id/upload", ticketHandler.UploadPhoto)
+    api.Post("/tickets/:id/messages", ticketHandler.AddMessage)
 	api.Put("/tickets/:id/status", ticketHandler.UpdateStatus)
 	api.Post("/tickets/:id/assign", ticketHandler.AssignTechnician)
 	api.Post("/tickets/:id/read", ticketHandler.MarkAsRead)
@@ -94,4 +96,10 @@ func main() {
 	log.Printf("🎫 Ticket Service démarré sur le port %s", port)
 	log.Printf("📡 WebSocket: ws://localhost:%s/ws?user_id=USER&role=ROLE", port)
 	log.Fatal(app.Listen(":" + port))
+    // Technician routes
+    tech := app.Group("/api/v1/technician")
+    tech.Use(middleware.AuthMiddleware)
+    tech.Get("/tickets", ticketHandler.GetTechnicianTickets)
+    tech.Put("/tickets/:id/assign", ticketHandler.AssignToMe)
+    tech.Put("/tickets/:id/status", ticketHandler.ChangeStatus)
 }
