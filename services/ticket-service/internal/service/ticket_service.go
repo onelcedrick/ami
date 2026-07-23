@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -8,18 +9,30 @@ import (
 
 	"github.com/am-info/ticket-service/internal/model"
 	"github.com/am-info/ticket-service/internal/repository"
+	ws "github.com/am-info/ticket-service/internal/websocket"
 )
 
 type TicketService struct {
 	repo  *repository.TicketRepository
-	
+	wsHub *ws.Hub
 }
 
-func NewTicketService(repo *repository.TicketRepository, ) *TicketService {
+func NewTicketService(repo *repository.TicketRepository, wsHub *ws.Hub) *TicketService {
 	return &TicketService{
 		repo:  repo,
 		wsHub: wsHub,
 	}
+}
+
+func (s *TicketService) notifyUser(userID string, payload map[string]interface{}) {
+	if s.wsHub == nil {
+		return
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	s.wsHub.SendToUser(userID, data)
 }
 
 func (s *TicketService) CreateTicket(clientID string, req model.CreateTicketRequest) (*model.Ticket, error) {
@@ -49,8 +62,7 @@ func (s *TicketService) CreateTicket(clientID string, req model.CreateTicketRequ
 		return nil, err
 	}
 
-	// Notifier les techniciens
-	// s.wsHub.BroadcastToRole(model.RoleTechnician, map[string]interface{}{
+	s.wsHub.BroadcastJSON(map[string]interface{}{
 		"type":    "new_ticket",
 		"ticket":  ticket,
 		"message": fmt.Sprintf("Nouveau ticket: %s", ticket.Subject),
@@ -83,7 +95,6 @@ func (s *TicketService) AddMessage(ticketID, senderID, senderRole string, req mo
 		return nil, errors.New("ticket non trouvé")
 	}
 
-	// Vérifier permissions
 	if senderRole == model.RoleClient && ticket.ClientID != senderID {
 		return nil, errors.New("non autorisé")
 	}
@@ -102,19 +113,17 @@ func (s *TicketService) AddMessage(ticketID, senderID, senderRole string, req mo
 		return nil, err
 	}
 
-	// Notification temps réel à l'autre partie
 	notifyUserID := ticket.ClientID
 	if senderRole == model.RoleClient && ticket.TechnicianID != nil {
 		notifyUserID = *ticket.TechnicianID
 	}
 
-	// s.wsHub.SendToUser(notifyUserID, map[string]interface{}{
+	s.notifyUser(notifyUserID, map[string]interface{}{
 		"type":      "new_message",
 		"ticket_id": ticketID,
 		"message":   msg,
 	})
 
-	// Si le client répond à un ticket en attente, le repasser en cours
 	if ticket.Status == model.StatusWaitingClient && senderRole == model.RoleClient {
 		s.repo.UpdateStatus(ticketID, model.StatusInProgress)
 	}
@@ -150,8 +159,7 @@ func (s *TicketService) UpdateStatus(ticketID, newStatus string) error {
 		return err
 	}
 
-	// Notifier le client
-	// s.wsHub.SendToUser(ticket.ClientID, map[string]interface{}{
+	s.notifyUser(ticket.ClientID, map[string]interface{}{
 		"type":      "status_changed",
 		"ticket_id": ticketID,
 		"status":    newStatus,
@@ -167,10 +175,12 @@ func (s *TicketService) AssignTechnician(ticketID, techID string) error {
 	}
 
 	ticket, _ := s.repo.FindByID(ticketID)
-	// s.wsHub.SendToUser(ticket.ClientID, map[string]interface{}{
-		"type":      "technician_assigned",
-		"ticket_id": ticketID,
-	})
+	if ticket != nil {
+		s.notifyUser(ticket.ClientID, map[string]interface{}{
+			"type":      "technician_assigned",
+			"ticket_id": ticketID,
+		})
+	}
 
 	log.Printf("👨‍🔧 Ticket %s assigné au technicien %s", ticketID, techID)
 	return nil

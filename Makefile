@@ -12,10 +12,10 @@ infra-start:
 	@echo "🚀 Démarrage infrastructure..."
 	docker compose up -d postgres redis rabbitmq mailhog
 	@echo "✅ Infrastructure prête!"
-	@echo "PostgreSQL: localhost:5432"
-	@echo "Redis: localhost:6379"
-	@echo "RabbitMQ: localhost:5672 (UI: http://localhost:15672)"
-	@echo "MailHog: http://localhost:8025"
+	@echo "PostgreSQL: localhost:5433"
+	@echo "Redis: localhost:6380"
+	@echo "RabbitMQ: localhost:5673 (UI: http://localhost:15673)"
+	@echo "MailHog: http://localhost:8026"
 
 infra-stop:
 	docker compose down
@@ -32,6 +32,7 @@ build:
 	cd services/cart-service && go build -o bin/cart cmd/main.go
 	cd services/order-service && go build -o bin/order cmd/main.go
 	cd services/ticket-service && go build -o bin/ticket cmd/main.go
+	cd services/admin-service && go build -o bin/admin cmd/main.go
 
 clean:
 	docker compose down -v

@@ -4,18 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"time"
 
 	"github.com/am-info/product-service/internal/model"
 	"github.com/am-info/product-service/internal/repository"
 	"github.com/redis/go-redis/v9"
-	"io"
-	"net/http"
-	"io"
-	"net/http"
-	"encoding/json"
-	"io"
-	"net/http"
 )
 
 type ProductService struct {
@@ -57,7 +53,7 @@ func (s *ProductService) GetProducts(params repository.ProductQueryParams) ([]mo
 		s.redis.Set(ctx, cacheKey, data, 5*time.Minute)
 	}
 
-    products = s.FetchAndApplyDiscounts(products)
+	products = s.FetchAndApplyDiscounts(products)
 	return products, total, nil
 }
 
@@ -138,12 +134,16 @@ func (s *ProductService) InvalidateCache() {
 	for _, key := range keys {
 		s.redis.Del(ctx, key)
 	}
-)
+}
 
 // FetchAndApplyDiscounts récupère les promotions depuis l'Admin Service
 func (s *ProductService) FetchAndApplyDiscounts(products []model.Product) []model.Product {
-	// Récupérer les promotions actives
-	req, _ := http.NewRequest("GET", "http://localhost:8086/api/v1/admin/discounts", nil)
+	adminURL := os.Getenv("ADMIN_SERVICE_URL")
+	if adminURL == "" {
+		adminURL = "http://localhost:8086"
+	}
+
+	req, _ := http.NewRequest("GET", adminURL+"/api/v1/admin/discounts", nil)
 	req.Header.Set("X-User-ID", "admin")
 	req.Header.Set("X-User-Role", "admin")
 	client := &http.Client{}
@@ -152,9 +152,9 @@ func (s *ProductService) FetchAndApplyDiscounts(products []model.Product) []mode
 		return products
 	}
 	defer resp.Body.Close()
-	
+
 	body, _ := io.ReadAll(resp.Body)
-	
+
 	var discounts []struct {
 		ID           string  `json:"id"`
 		Name         string  `json:"name"`
@@ -164,21 +164,22 @@ func (s *ProductService) FetchAndApplyDiscounts(products []model.Product) []mode
 		TargetID     string  `json:"target_id"`
 		IsActive     bool    `json:"is_active"`
 	}
-	
+
 	json.Unmarshal(body, &discounts)
-	
+
 	for i := range products {
 		bestPrice := products[i].Price
-		bestDiscount := 0.0
-		
+
 		catID := ""
 		if products[i].CategoryID != nil {
 			catID = *products[i].CategoryID
 		}
-		
+
 		for _, d := range discounts {
-			if !d.IsActive { continue }
-			
+			if !d.IsActive {
+				continue
+			}
+
 			applicable := false
 			switch d.TargetType {
 			case "global":
@@ -188,7 +189,7 @@ func (s *ProductService) FetchAndApplyDiscounts(products []model.Product) []mode
 			case "category":
 				applicable = (d.TargetID == catID || d.TargetID == products[i].Category.Name)
 			}
-			
+
 			if applicable {
 				var newPrice float64
 				switch d.DiscountType {
@@ -196,23 +197,23 @@ func (s *ProductService) FetchAndApplyDiscounts(products []model.Product) []mode
 					newPrice = products[i].Price * (1 - d.Value/100)
 				case "fixed_amount":
 					newPrice = products[i].Price - d.Value
-					if newPrice < 0 { newPrice = 0 }
+					if newPrice < 0 {
+						newPrice = 0
+					}
 				}
-				
+
 				if newPrice < bestPrice {
 					bestPrice = newPrice
-					bestDiscount = d.Value
 				}
 			}
 		}
-		
-		// Appliquer la meilleure réduction trouvée
+
 		if bestPrice < products[i].Price {
 			originalPrice := products[i].Price
 			products[i].Price = bestPrice
 			products[i].ComparePrice = &originalPrice
 		}
 	}
-	
+
 	return products
 }

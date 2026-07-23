@@ -29,7 +29,6 @@ func main() {
 		log.Fatal("❌ Erreur connexion DB:", err)
 	}
 
-	// Créer les tables
 	db.Exec(`CREATE TABLE IF NOT EXISTS tickets (
 		id VARCHAR(36) PRIMARY KEY, client_id VARCHAR(255) NOT NULL,
 		technician_id VARCHAR(255), order_id VARCHAR(36),
@@ -51,11 +50,10 @@ func main() {
 
 	log.Println("✅ Ticket Service: Database connectée")
 
-	wsHub := service.NewWebSocketHub()
+	wsHub := ws.NewHub()
 	repo := repository.NewTicketRepository(db)
 	ticketService := service.NewTicketService(repo, wsHub)
 	ticketHandler := handler.NewTicketHandler(ticketService)
-	wsHandler := ws.NewWSHandler(wsHub)
 
 	app := fiber.New(fiber.Config{AppName: "AM Info - Ticket Service"})
 	app.Use(recover.New())
@@ -70,10 +68,8 @@ func main() {
 		return c.JSON(fiber.Map{"status": "ok", "service": "ticket-service"})
 	})
 
-	// WebSocket
-	app.Get("/ws", websocket.New(wsHandler.HandleConnection))
+	app.Get("/ws", websocket.New(ws.NewWSHandler(wsHub)))
 
-	// Routes protégées
 	api := app.Group("/api/v1")
 	api.Use(middleware.AuthMiddleware)
 
@@ -81,9 +77,9 @@ func main() {
 	api.Get("/tickets", ticketHandler.GetTickets)
 	api.Get("/tickets/unread-count", ticketHandler.GetUnreadCount)
 	api.Get("/tickets/:id", ticketHandler.GetTicket)
-    api.Get("/tickets/sla-rules", ticketHandler.GetSLARules)
-    api.Post("/tickets/:id/upload", ticketHandler.UploadPhoto)
-    api.Post("/tickets/:id/messages", ticketHandler.AddMessage)
+	api.Get("/tickets/sla-rules", ticketHandler.GetSLARules)
+	api.Post("/tickets/:id/upload", ticketHandler.UploadPhoto)
+	api.Post("/tickets/:id/messages", ticketHandler.AddMessage)
 	api.Put("/tickets/:id/status", ticketHandler.UpdateStatus)
 	api.Post("/tickets/:id/assign", ticketHandler.AssignTechnician)
 	api.Post("/tickets/:id/read", ticketHandler.MarkAsRead)
@@ -96,10 +92,4 @@ func main() {
 	log.Printf("🎫 Ticket Service démarré sur le port %s", port)
 	log.Printf("📡 WebSocket: ws://localhost:%s/ws?user_id=USER&role=ROLE", port)
 	log.Fatal(app.Listen(":" + port))
-    // Technician routes
-    tech := app.Group("/api/v1/technician")
-    tech.Use(middleware.AuthMiddleware)
-    tech.Get("/tickets", ticketHandler.GetTechnicianTickets)
-    tech.Put("/tickets/:id/assign", ticketHandler.AssignToMe)
-    tech.Put("/tickets/:id/status", ticketHandler.ChangeStatus)
 }

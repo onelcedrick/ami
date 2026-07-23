@@ -1,18 +1,19 @@
 #!/bin/bash
+set -e
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
 echo "🚀 Démarrage de tous les services..."
 
-# Infrastructure
-docker compose up -d postgres redis
+docker compose -f "$ROOT/docker-compose.yml" up -d postgres redis
 sleep 3
 
-# Services Go en arrière-plan
-cd services/product-service && ./bin/product-service &
-cd services/auth-service && ./bin/auth-service &
-cd services/cart-service && ./bin/cart-service &
-cd services/order-service && ./bin/order-service &
-cd services/ticket-service && ./bin/ticket-service &
-cd services/api-gateway && ./bin/gateway &
-cd admin-service && ./bin/admin-service &
+cd "$ROOT/services/product-service" && ./bin/product &
+cd "$ROOT/services/auth-service" && ./bin/auth &
+cd "$ROOT/services/cart-service" && ./bin/cart &
+cd "$ROOT/services/order-service" && ./bin/order &
+cd "$ROOT/services/ticket-service" && ./bin/ticket &
+cd "$ROOT/services/api-gateway" && ./bin/gateway &
+cd "$ROOT/services/admin-service" && ./bin/admin &
 
 echo "✅ Tous les services sont lancés !"
 echo "Gateway: http://localhost:8080"
@@ -23,5 +24,4 @@ echo "Orders: http://localhost:8084"
 echo "Tickets: http://localhost:8085"
 echo "Admin: http://localhost:8086"
 
-# Garder le script en vie
 wait

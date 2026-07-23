@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"encoding/json"
 	"log"
 	"sync"
 
@@ -21,17 +22,18 @@ type Hub struct {
 	mu         sync.RWMutex
 }
 
-var DefaultHub *Hub
-
-func init() {
-	DefaultHub = &Hub{
+func NewHub() *Hub {
+	h := &Hub{
 		clients:    make(map[string]*Client),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		broadcast:  make(chan []byte, 256),
 	}
-	go DefaultHub.Run()
+	go h.Run()
+	return h
 }
+
+var DefaultHub = NewHub()
 
 func (h *Hub) Run() {
 	for {
@@ -77,38 +79,37 @@ func (h *Hub) SendToUser(userID string, message []byte) {
 	}
 }
 
-func HandleWebSocket(c *websocket.Conn) {
-	userID := c.Query("user_id", c.Params("user_id", "anonymous"))
-	
-	client := &Client{
-		ID:   userID,
-		Conn: c,
+func (h *Hub) BroadcastJSON(payload map[string]interface{}) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return
 	}
+	h.broadcast <- data
+}
 
-	DefaultHub.register <- client
-	log.Printf("✅ WebSocket connecté: %s", userID)
+func NewWSHandler(h *Hub) func(*websocket.Conn) {
+	return func(c *websocket.Conn) {
+		userID := c.Query("user_id", "anonymous")
 
-	// Lire les messages entrants
-	for {
-		messageType, msg, err := c.ReadMessage()
-		if err != nil {
-			log.Printf("❌ WebSocket erreur lecture: %v", err)
-			break
+		client := &Client{
+			ID:   userID,
+			Conn: c,
 		}
-		
-		log.Printf("📨 Message reçu de %s: %s", userID, string(msg))
-		
-		// Broadcast à tous les autres clients
-		DefaultHub.mu.RLock()
-		for id, client := range DefaultHub.clients {
-			if id != userID {
-				client.Mu.Lock()
-				client.Conn.WriteMessage(messageType, msg)
-				client.Mu.Unlock()
+
+		h.register <- client
+		log.Printf("✅ WebSocket connecté: %s", userID)
+
+		for {
+			_, _, err := c.ReadMessage()
+			if err != nil {
+				break
 			}
 		}
-		DefaultHub.mu.RUnlock()
-	}
 
-	DefaultHub.unregister <- client
+		h.unregister <- client
+	}
+}
+
+func HandleWebSocket(c *websocket.Conn) {
+	NewWSHandler(DefaultHub)(c)
 }
