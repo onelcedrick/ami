@@ -47,7 +47,7 @@ export default function TicketListPage() {
   useEffect(() => { loadMessages(); }, [selectedTicket?.id]);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
   useEffect(() => {
-    const tid = searchParams.get('id');
+    const tid = searchParams?.get('id');
     if (tid && tickets.length > 0) {
       const t = tickets.find(t => t.id === tid);
       if (t) { setSelectedTicket(t); setShowMobileChat(true); }

@@ -66,9 +66,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
               {isAuthenticated && authLinks.map(l => (
                 <Link key={l.href} href={l.href} className="px-3 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-gray-700 transition flex items-center gap-1.5 relative">
                   {l.icon}
-                  {l.badge > 0 && (
+                  {(l.badge ?? 0) > 0 && (
                     <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center animate-pulse">
-                      {l.badge > 9 ? '9+' : l.badge}
+                      {(l.badge ?? 0) > 9 ? '9+' : l.badge}
                     </span>
                   )}
                   {l.label}

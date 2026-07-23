@@ -1,5 +1,3 @@
-'use client';
-
 // -*- coding: utf-8 -*-
 'use client';
 
@@ -14,7 +12,7 @@ export default function GoogleCallback() {
   const { login } = useAuth();
 
   useEffect(() => {
-    const token = searchParams.get('token');
+    const token = searchParams?.get('token');
     if (token) {
       localStorage.setItem('token', token);
       

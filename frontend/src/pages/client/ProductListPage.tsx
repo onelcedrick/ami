@@ -38,7 +38,7 @@ export default function ProductListPage() {
     api.get(`/api/v1/products?${new URLSearchParams(params)}`).then((r: any) => {
       const products = r.data || [];
       setData({ items: products, total: r.pagination?.total || products.length, page, pages: r.pagination?.total_pages || 1 });
-      const cats = [...new Set(products.map((p: any) => p.category?.name || p.category_id).filter(Boolean))];
+      const cats = Array.from(new Set(products.map((p: any) => p.category?.name || p.category_id).filter(Boolean)));
       setAllCategories(cats as any);
     }).finally(() => setLoading(false));
   };

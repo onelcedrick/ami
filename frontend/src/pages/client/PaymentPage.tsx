@@ -11,7 +11,7 @@ import api from '@/src/api/axios';
 
 export default function PaymentPage() {
   const searchParams = useSearchParams();
-  const orderId = searchParams.get('order_id');
+  const orderId = searchParams?.get('order_id');
   const [methods, setMethods] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
   const [phone, setPhone] = useState('');

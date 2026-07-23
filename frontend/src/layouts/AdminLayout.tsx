@@ -29,8 +29,8 @@ const IconInvoice = ({ size = 16 }: { size?: number }) => (
   </svg>
 );
 
-const IconChevronLeft = ({ size = 20 }: { size?: number }) => (
-  <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+const IconChevronLeft = ({ size = 20, className = '' }: { size?: number; className?: string }) => (
+  <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
   </svg>
 );

@@ -11,3 +11,4 @@ uploads/*
 !uploads/.gitkeep
 keys/*.pem
 !keys/.gitkeep
+frontend.zip

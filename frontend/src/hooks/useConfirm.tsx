@@ -6,7 +6,11 @@ import ConfirmModal from '@/src/components/ConfirmModal';
 
 export default function useConfirm() {
   const [isOpen, setIsOpen] = useState(false);
-  const [config, setConfig] = useState({ title: '', message: '', variant: 'danger' as const });
+  const [config, setConfig] = useState<{
+    title: string;
+    message: string;
+    variant: 'danger' | 'warning' | 'success' | 'info';
+  }>({ title: '', message: '', variant: 'danger' });
   const [resolveRef, setResolveRef] = useState<((value: boolean) => void) | null>(null);
 
   const confirm = useCallback((title: string, message: string, variant: 'danger' | 'warning' | 'success' | 'info' = 'danger') => {

@@ -34,7 +34,7 @@ export default function ProfilePage() {
     const formData = new FormData();
     formData.append('file', file);
     try {
-      const res = await api.post('/api/v1/auth/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } } as any);
+      const res = await api.post('/api/v1/auth/avatar', formData);
       setAvatarUrl(res.data.avatar_url);
       setPreview(null);
       if (fileInputRef.current) fileInputRef.current.value = '';

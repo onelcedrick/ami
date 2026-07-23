@@ -15,7 +15,7 @@ import { IconPackage } from '@/src/components/Icons';
 
 export default function ProductDetailPage() {
   const params = useParams();
-  const id = params.id as string;
+  const id = params?.id as string;
   const [product, setProduct] = useState<any>(null);
   const [similarProducts, setSimilarProducts] = useState<any[]>([]);
   const [recentlyViewed, setRecentlyViewed] = useState<any[]>([]);
