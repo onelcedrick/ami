@@ -1,28 +1,37 @@
-// -*- coding: utf-8 -*-
-const MAX_ITEMS = 8;
+'use client';
 
-interface RecentProduct {
-  id: string;
-  name: string;
-  price: number;
-  image_url?: string;
-  category?: string;
+import { useState, useEffect } from 'react';
+
+const STORAGE_KEY = 'am_recently_viewed';
+
+export function useRecentlyViewed() {
+  const [recentlyViewed, setRecentlyViewed] = useState<any[]>([]);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        setRecentlyViewed(JSON.parse(stored));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const addProduct = (product: any) => {
+    if (!product || !product.id) return;
+    try {
+      const current = [...recentlyViewed];
+      const filtered = current.filter((p) => p.id !== product.id);
+      const updated = [product, ...filtered].slice(0, 8);
+      setRecentlyViewed(updated);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+  };
+
+  return { recentlyViewed, addProduct };
 }
 
-export function addRecentlyViewed(product: RecentProduct) {
-  const viewed: RecentProduct[] = JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
-  const filtered = viewed.filter(p => p.id !== product.id);
-  filtered.unshift({
-    id: product.id,
-    name: product.name,
-    price: product.price,
-    image_url: product.image_url,
-    category: product.category
-  });
-  if (filtered.length > MAX_ITEMS) filtered.pop();
-  localStorage.setItem('recentlyViewed', JSON.stringify(filtered));
-}
-
-export function getRecentlyViewed(): RecentProduct[] {
-  return JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
-}
+export default useRecentlyViewed;

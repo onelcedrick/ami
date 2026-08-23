@@ -3,7 +3,9 @@
 // -*- coding: utf-8 -*-
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import api from '@/src/api/axios';
+import { formatAriary } from '@/src/lib/currency';
 
 interface SearchBarProps {
   className?: string;
@@ -103,9 +105,9 @@ export default function SearchBar({ className = '' }: SearchBarProps) {
                 i === selectedIndex ? 'bg-blue-50' : 'hover:bg-gray-50'
               }`}
             >
-              <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+              <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden relative">
                 {product.image_url ? (
-                  <img src={product.image_url} alt="" className="w-full h-full object-cover" />
+                  <Image src={product.image_url} alt={product.name || 'Produit'} fill sizes="40px" className="object-cover" />
                 ) : (
                   <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
@@ -114,7 +116,7 @@ export default function SearchBar({ className = '' }: SearchBarProps) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{product.name}</p>
-                <p className="text-xs text-gray-400">{product.category} - {product.price?.toFixed(2)} EUR</p>
+                <p className="text-xs text-gray-400">{product.category} - {formatAriary(product.price)}</p>
               </div>
               <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />

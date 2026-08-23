@@ -1,12 +1,13 @@
+// -*- coding: utf-8 -*-
 'use client';
 
-// -*- coding: utf-8 -*-
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import api from '@/src/api/axios';
 import { useAuth } from '@/src/hooks/useAuth';
-import { IconHeart } from './Icons';
+import { IconHeart, IconPackage } from './Icons';
+import { formatAriary } from '@/src/lib/currency';
 
 interface ProductCardProps {
   product: any;
@@ -18,7 +19,9 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
   const [inCompare, setInCompare] = useState(false);
   const { isAuthenticated } = useAuth();
   const finalPrice = product.final_price || product.price;
-  const hasDiscount = product.discount_percent > 0;
+  const hasDiscount = (product.compare_price && product.compare_price > product.price) || (product.discount_percent && product.discount_percent > 0);
+  const discountPct = product.discount_percent || (product.compare_price ? Math.round(((product.compare_price - product.price) / product.compare_price) * 100) : 0);
+  const imgUrl = product.image_url || product.thumbnail || product.images?.[0];
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -30,7 +33,10 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
 
   const toggleFav = async (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
-    if (!isAuthenticated) return;
+    if (!isAuthenticated) {
+      toast.error('Connectez-vous pour ajouter aux favoris');
+      return;
+    }
     try { const res = await api.post(`/wishlist/${product.id}`); setIsFav(res.data.added); } catch {}
   };
 
@@ -44,73 +50,110 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
       localStorage.setItem('compareList', JSON.stringify(updated));
       setInCompare(false);
       if (updated.length === 0) localStorage.removeItem('compareCategory');
-      toast.success('Retire de la comparaison');
+      toast.success('Retiré de la comparaison');
     } else if (compareList.length >= 4) {
-      toast.error('Maximum 4 produits a comparer');
-    } else if (savedCategory && product.category && product.category !== savedCategory) {
-      toast.error('Categorie differente ! Videz et recommencez.', { duration: 5000 });
+      toast.error('Maximum 4 produits à comparer');
+    } else if (savedCategory && product.category?.id && product.category?.id !== savedCategory) {
+      toast.error('Catégorie différente ! Comparez des produits équivalents.', { duration: 4000 });
     } else {
       compareList.push(product.id);
       localStorage.setItem('compareList', JSON.stringify(compareList));
-      localStorage.setItem('compareCategory', product.category || '');
+      localStorage.setItem('compareCategory', product.category?.id || '');
       setInCompare(true);
-      toast.success(`Ajoute a la comparaison (${compareList.length}/4)`);
+      toast.success(`Ajouté au comparateur (${compareList.length}/4)`);
     }
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow hover:shadow-lg transition overflow-hidden group relative">
-      <button onClick={toggleFav}
-        className={`absolute top-2 right-2 z-10 w-8 h-8 rounded-full shadow flex items-center justify-center transition ${
-          isFav ? 'bg-red-50 text-red-500' : 'bg-white/80 text-gray-300 hover:text-red-400'
-        }`}>
+    <div className="bg-white rounded-2xl shadow-sm hover:shadow-md border border-gray-100 transition overflow-hidden group relative flex flex-col justify-between">
+      {/* Wishlist button */}
+      <button
+        onClick={toggleFav}
+        className={`absolute top-3 right-3 z-10 w-8 h-8 rounded-full shadow flex items-center justify-center transition ${
+          isFav ? 'bg-red-50 text-red-500' : 'bg-white/90 text-gray-400 hover:text-red-500'
+        }`}
+        title={isFav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+      >
         <IconHeart filled={isFav} size={16} />
       </button>
 
-      <Link href={`/products/${product.id}`}>
-        <div className="h-32 md:h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
-          <IconHeart size={40} className="text-gray-300" />
+      {/* Promo Badge */}
+      {hasDiscount && discountPct > 0 && (
+        <span className="absolute top-3 left-3 bg-red-600 text-white text-[11px] font-black px-2.5 py-0.5 rounded-full shadow z-10">
+          PROMO -{discountPct}%
+        </span>
+      )}
+
+      {/* Image link */}
+      <Link href={`/products/${product.id}`} className="block relative">
+        <div className="h-44 sm:h-52 bg-gray-50 flex items-center justify-center overflow-hidden border-b border-gray-50">
+          {imgUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imgUrl}
+              alt={product.name}
+              className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+            />
+          ) : (
+            <IconPackage size={40} className="text-gray-300" />
+          )}
         </div>
       </Link>
 
-      <div className="p-3 md:p-4">
-        {hasDiscount && (
-          <span className="absolute top-2 left-2 bg-red-500 text-white px-2 py-0.5 rounded-full text-xs font-bold z-10">
-            -{product.discount_percent}%
-          </span>
-        )}
+      {/* Body content */}
+      <div className="p-4 flex-1 flex flex-col justify-between">
+        <div>
+          <div className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider mb-1 truncate">
+            {product.category?.name || product.brand || 'AM Info'}
+          </div>
 
-        <Link href={`/products/${product.id}`}>
-          <h3 className="font-bold text-sm md:text-base truncate hover:text-blue-600">{product.name}</h3>
-        </Link>
-        <p className="text-gray-500 text-xs mb-2 truncate">{product.category?.name || 'Non categorise'}</p>
-
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-xl font-bold text-blue-600">{finalPrice?.toFixed(2)} EUR</span>
-          {hasDiscount && (
-            <span className="text-sm text-gray-400 line-through">{product.price?.toFixed(2)} EUR</span>
-          )}
+          <Link href={`/products/${product.id}`}>
+            <h3 className="font-bold text-sm text-gray-900 line-clamp-2 hover:text-blue-600 transition leading-snug">
+              {product.name}
+            </h3>
+          </Link>
         </div>
 
-        <div className="flex gap-2 mb-1">
-          <Link href={`/products/${product.id}`} 
-            className="flex-1 text-center border border-blue-600 text-blue-600 py-2 rounded-lg text-sm hover:bg-blue-50 transition">
-            Details
-          </Link>
-          <button onClick={() => onAddToCart && onAddToCart(product.id)} 
-            className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm hover:bg-blue-700 transition">
-            Ajouter
+        <div className="pt-3">
+          {/* Price formatted in Ariary */}
+          <div className="flex items-baseline gap-2 mb-3 flex-wrap">
+            <span className="text-lg font-extrabold text-blue-600">
+              {formatAriary(finalPrice)}
+            </span>
+            {hasDiscount && product.compare_price && (
+              <span className="text-xs text-gray-400 line-through">
+                {formatAriary(product.compare_price)}
+              </span>
+            )}
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-2 mb-2">
+            <Link
+              href={`/products/${product.id}`}
+              className="flex-1 text-center border border-gray-200 text-gray-700 py-2 rounded-xl text-xs font-semibold hover:bg-gray-50 transition"
+            >
+              Détails
+            </Link>
+            <button
+              onClick={() => onAddToCart && onAddToCart(product.id)}
+              className="flex-1 bg-blue-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-blue-700 transition shadow-sm"
+            >
+              Ajouter
+            </button>
+          </div>
+
+          <button
+            onClick={toggleCompare}
+            className={`w-full text-xs py-1 rounded-lg transition text-center ${
+              inCompare
+                ? 'bg-blue-50 text-blue-600 font-semibold'
+                : 'text-gray-400 hover:text-blue-600'
+            }`}
+          >
+            {inCompare ? '✓ Comparateur' : '+ Comparer'}
           </button>
         </div>
-
-        <button onClick={toggleCompare} 
-          className={`w-full text-xs mt-1 py-1 rounded-lg transition ${
-            inCompare 
-              ? 'bg-blue-50 text-blue-600 font-medium' 
-              : 'text-gray-400 hover:text-blue-500'
-          }`}>
-          {inCompare ? 'Dans la comparaison' : '+ Comparer'}
-        </button>
       </div>
     </div>
   );

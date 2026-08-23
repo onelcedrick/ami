@@ -1,5 +1,5 @@
 'use client';
-// -*- coding: utf-8 -*-
+
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -7,6 +7,7 @@ import { useAuth } from '@/src/hooks/useAuth';
 import toast from 'react-hot-toast';
 import api from '@/src/api/axios';
 import { IconPackage, IconCart, IconMap, IconStar, IconOrders } from '@/src/components/Icons';
+import { formatAriary } from '@/src/lib/currency';
 
 export default function HomePage() {
   const { isAuthenticated } = useAuth();
@@ -87,13 +88,18 @@ export default function HomePage() {
                 <div className="relative">
                   <span className="absolute top-2 left-2 bg-green-500 text-white px-2 py-0.5 rounded-full text-[10px] font-bold z-10">NOUVEAU</span>
                   <Link href={`/products/${p.id}`} className="block h-36 md:h-48 bg-gray-50 flex items-center justify-center overflow-hidden">
-                    <IconPackage size={40} className="text-gray-300" />
+                    {p.image_url || p.thumbnail ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={p.image_url || p.thumbnail} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition" />
+                    ) : (
+                      <IconPackage size={40} className="text-gray-300" />
+                    )}
                   </Link>
                 </div>
                 <div className="p-3 md:p-4">
                   <Link href={`/products/${p.id}`}><h3 className="font-bold text-sm md:text-base truncate hover:text-blue-600">{p.name}</h3></Link>
                   <div className="flex items-center gap-2 mt-1.5">
-                    <span className="text-blue-600 font-bold text-sm">{p.price?.toFixed(2)} EUR</span>
+                    <span className="text-blue-600 font-bold text-sm">{formatAriary(p.price)}</span>
                   </div>
                   {isAuthenticated && (
                     <button onClick={() => addToCart(p.id, p.name)}

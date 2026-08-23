@@ -53,6 +53,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin/clients', icon: <IconUser size={20} />, label: 'Clients' },
     { href: '/admin/users', icon: <IconPlus size={20} />, label: 'Utilisateurs' },
     { href: '/admin/invoices', icon: <IconInvoice size={20} />, label: 'Factures' },
+    { href: '/admin/settings', icon: <IconLogs size={20} />, label: 'Paramètres' },
     { href: '/admin/logs', icon: <IconLogs size={20} />, label: 'Logs' },
   ];
 

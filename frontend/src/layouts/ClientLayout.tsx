@@ -35,13 +35,15 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const navLinks = [
     { href: '/', icon: <IconHome size={18} />, label: 'Accueil' },
     { href: '/products', icon: <IconPackage size={18} />, label: 'Produits' },
+    { href: '/compare', icon: <IconPackage size={18} />, label: 'Comparateur' },
+    { href: '/about', icon: <IconPackage size={18} />, label: 'À Propos' },
+    { href: '/map', icon: <IconMap size={18} />, label: 'Boutique' },
   ];
 
   const authLinks = [
     { href: '/cart', icon: <IconCart size={18} />, label: 'Panier', badge: cartCount },
     { href: '/orders', icon: <IconOrders size={18} />, label: 'Commandes' },
-    { href: '/tickets', icon: <IconTicket size={18} />, label: 'Maintenance' },
-    { href: '/map', icon: <IconMap size={18} />, label: 'Boutique' },
+    { href: '/tickets', icon: <IconTicket size={18} />, label: 'SAV & Assistance' },
   ];
 
   return (

@@ -1,46 +1,53 @@
-// -*- coding: utf-8 -*-
 'use client';
 
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import ConfirmModal from '@/src/components/ConfirmModal';
 
-export default function useConfirm() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [config, setConfig] = useState<{
-    title: string;
-    message: string;
-    variant: 'danger' | 'warning' | 'success' | 'info';
-  }>({ title: '', message: '', variant: 'danger' });
-  const [resolveRef, setResolveRef] = useState<((value: boolean) => void) | null>(null);
+interface ConfirmOptions {
+  title?: string;
+  message?: string;
+  confirmText?: string;
+  cancelText?: string;
+  type?: 'danger' | 'warning' | 'info';
+}
 
-  const confirm = useCallback((title: string, message: string, variant: 'danger' | 'warning' | 'success' | 'info' = 'danger') => {
-    return new Promise<boolean>((resolve) => {
-      setConfig({ title, message, variant });
-      setIsOpen(true);
-      setResolveRef(() => resolve);
+export function useConfirm() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [options, setOptions] = useState<ConfirmOptions>({});
+  const [resolver, setResolver] = useState<((value: boolean) => void) | null>(null);
+
+  const confirm = useCallback((opts: ConfirmOptions): Promise<boolean> => {
+    setOptions(opts);
+    setIsOpen(true);
+    return new Promise((resolve) => {
+      setResolver(() => resolve);
     });
   }, []);
 
   const handleConfirm = () => {
     setIsOpen(false);
-    if (resolveRef) resolveRef(true);
+    if (resolver) resolver(true);
   };
 
   const handleCancel = () => {
     setIsOpen(false);
-    if (resolveRef) resolveRef(false);
+    if (resolver) resolver(false);
   };
 
-  const Modal = (
+  const ConfirmDialog = (
     <ConfirmModal
-      open={isOpen}
-      title={config.title}
-      message={config.message}
-      variant={config.variant}
+      isOpen={isOpen}
+      onClose={handleCancel}
       onConfirm={handleConfirm}
-      onCancel={handleCancel}
+      title={options.title || 'Confirmer l’action'}
+      message={options.message || 'Êtes-vous sûr de vouloir continuer ?'}
+      confirmText={options.confirmText || 'Confirmer'}
+      cancelText={options.cancelText || 'Annuler'}
+      type={options.type || 'danger'}
     />
   );
 
-  return { confirm, Modal };
+  return { confirm, ConfirmDialog };
 }
+
+export default useConfirm;
